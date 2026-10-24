@@ -1,9 +1,12 @@
+import os
 import re
 from io import BytesIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.test.utils import override_settings
 from rest_framework.authtoken.models import Token
@@ -43,6 +46,74 @@ class ApiDocumentationTests(TestCase):
             response["Access-Control-Allow-Origin"],
             "http://localhost:5173",
         )
+
+
+class BootstrapAdminCommandTests(TestCase):
+    def test_bootstrap_is_disabled_without_environment_variables(self):
+        with patch.dict(os.environ, {}, clear=True):
+            call_command("bootstrap_admin")
+
+        self.assertFalse(get_user_model().objects.exists())
+
+    def test_creates_superuser_from_environment_variables(self):
+        bootstrap_environment = {
+            "BOOTSTRAP_ADMIN_USERNAME": "initial-admin",
+            "BOOTSTRAP_ADMIN_EMAIL": "initial-admin@example.com",
+            "BOOTSTRAP_ADMIN_PASSWORD": "SecureAdmin-726!Tiger",
+        }
+        with patch.dict(os.environ, bootstrap_environment, clear=True):
+            call_command("bootstrap_admin")
+
+        user = get_user_model().objects.get(username="initial-admin")
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.check_password("SecureAdmin-726!Tiger"))
+
+    def test_does_not_replace_existing_superuser_password(self):
+        user = get_user_model().objects.create_superuser(
+            username="initial-admin",
+            email="initial-admin@example.com",
+            password="ExistingAdmin-936!Tiger",
+        )
+        bootstrap_environment = {
+            "BOOTSTRAP_ADMIN_USERNAME": "initial-admin",
+            "BOOTSTRAP_ADMIN_EMAIL": "initial-admin@example.com",
+        }
+
+        with patch.dict(os.environ, bootstrap_environment, clear=True):
+            call_command("bootstrap_admin")
+
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("ExistingAdmin-936!Tiger"))
+        self.assertEqual(get_user_model().objects.count(), 1)
+
+    def test_promotes_existing_user_when_email_matches(self):
+        user = get_user_model().objects.create_user(
+            username="initial-admin",
+            email="initial-admin@example.com",
+            password="ExistingUser-936!Tiger",
+        )
+        bootstrap_environment = {
+            "BOOTSTRAP_ADMIN_USERNAME": "initial-admin",
+            "BOOTSTRAP_ADMIN_EMAIL": "initial-admin@example.com",
+        }
+
+        with patch.dict(os.environ, bootstrap_environment, clear=True):
+            call_command("bootstrap_admin")
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.check_password("ExistingUser-936!Tiger"))
+
+    def test_rejects_incomplete_environment_variables(self):
+        with patch.dict(
+            os.environ,
+            {"BOOTSTRAP_ADMIN_USERNAME": "initial-admin"},
+            clear=True,
+        ):
+            with self.assertRaises(CommandError):
+                call_command("bootstrap_admin")
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
