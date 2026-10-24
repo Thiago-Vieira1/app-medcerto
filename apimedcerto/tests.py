@@ -32,6 +32,18 @@ class ApiDocumentationTests(TestCase):
             [parameter["name"] for parameter in medication_parameters],
         )
 
+    def test_configured_frontend_origin_can_access_api(self):
+        response = APIClient().get(
+            "/api/schema/?format=json",
+            HTTP_ORIGIN="http://localhost:5173",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response["Access-Control-Allow-Origin"],
+            "http://localhost:5173",
+        )
+
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class PasswordChangeViewTests(TestCase):
