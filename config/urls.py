@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apimedcerto.views import *
 
 router = DefaultRouter()
@@ -25,6 +26,12 @@ router.register(r'medications', MedicationViewSet, basename='medication')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/medications/import/', MedicationImportView.as_view(), name='medication-import'),
+    path('api/users/', UserCreateView.as_view(), name='user-create'),
+    path('api/users/password/change/code/', PasswordChangeCodeView.as_view(), name='password-change-code'),
+    path('api/users/password/change/', PasswordChangeView.as_view(), name='password-change'),
     path('api/', include(router.urls)),
     path('api/login/', LoginView.as_view()),
 ]
