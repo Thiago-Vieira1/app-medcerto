@@ -4,8 +4,8 @@ services:
     runtime: python
     plan: free
     region: virginia
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input && python manage.py migrate && python manage.py seed_medications
-    startCommand: python manage.py bootstrap_admin && gunicorn config.wsgi:application --workers 1 --threads 4 --timeout 120
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input
+    startCommand: python manage.py migrate && python manage.py bootstrap_admin && python manage.py seed_medications && gunicorn config.wsgi:application --workers 1 --threads 4 --timeout 120
     healthCheckPath: /api/schema/
     autoDeploy: true
     envVars:
