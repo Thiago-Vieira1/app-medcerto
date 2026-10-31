@@ -1,12 +1,14 @@
 import os
 import re
+import tempfile
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.utils import override_settings
 from rest_framework.authtoken.models import Token
@@ -114,6 +116,47 @@ class BootstrapAdminCommandTests(TestCase):
         ):
             with self.assertRaises(CommandError):
                 call_command("bootstrap_admin")
+
+
+class SeedMedicationsCommandTests(TestCase):
+    def test_imports_catalog_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base_directory = Path(temporary_directory)
+            catalog_directory = base_directory / "data"
+            catalog_directory.mkdir()
+            catalog_path = catalog_directory / "medications.xlsx"
+
+            workbook = Workbook()
+            worksheet = workbook.active
+            worksheet.title = "Lista PMC"
+            worksheet.append(
+                ["PRODUTO", "TARJA", "CLASSE TERAPÊUTICA", "REGISTRO"]
+            )
+            worksheet.append(
+                ["DIPIRONA", "Tarja sem tarja", "Analgésicos", "123"]
+            )
+            worksheet.append(
+                ["Dipirona", "Tarja sem tarja", "Analgésicos", "456"]
+            )
+            workbook.save(catalog_path)
+
+            with override_settings(BASE_DIR=base_directory):
+                call_command("seed_medications")
+                call_command("seed_medications")
+
+        self.assertEqual(Medication.objects.count(), 1)
+        medication = Medication.objects.get()
+        self.assertEqual(medication.name, "DIPIRONA")
+        self.assertEqual(medication.anvisa_registration, "123")
+
+    def test_reports_missing_bundled_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            with override_settings(BASE_DIR=Path(temporary_directory)):
+                with self.assertRaisesMessage(
+                    CommandError,
+                    "Medication catalog not found",
+                ):
+                    call_command("seed_medications")
 
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
